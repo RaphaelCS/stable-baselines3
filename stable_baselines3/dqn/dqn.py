@@ -106,7 +106,7 @@ class DQN(OffPolicyAlgorithm):
             seed=seed,
             sde_support=False,
             optimize_memory_usage=optimize_memory_usage,
-            supported_action_spaces=(gym.spaces.Discrete,),
+            supported_action_spaces=None
         )
 
         self.exploration_initial_eps = exploration_initial_eps
@@ -205,11 +205,8 @@ class DQN(OffPolicyAlgorithm):
             (used in recurrent policies)
         """
         if not deterministic and np.random.rand() < self.exploration_rate:
-            if is_vectorized_observation(observation, self.observation_space):
-                n_batch = observation.shape[0]
-                action = np.array([self.action_space.sample() for _ in range(n_batch)])
-            else:
-                action = np.array(self.action_space.sample())
+            # Not sure how to modify is_vectorized_observation(observation, self.observation_space), leave it in the future
+            action = np.array([self.action_space.sample() for _ in range(len(observation))])
         else:
             action, state = self.policy.predict(observation, state, mask, deterministic)
         return action, state

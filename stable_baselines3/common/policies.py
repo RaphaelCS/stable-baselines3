@@ -4,6 +4,7 @@ import collections
 from abc import ABC, abstractmethod
 from functools import partial
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
+from copy import deepcopy
 
 import gym
 import numpy as np
@@ -25,6 +26,7 @@ from stable_baselines3.common.type_aliases import Schedule
 from stable_baselines3.common.utils import get_device, is_vectorized_observation
 from stable_baselines3.common.vec_env import VecTransposeImage
 from stable_baselines3.common.vec_env.obs_dict_wrapper import ObsDictWrapper
+from stable_baselines3.common.raph_tools import list_dict_numpy_to_tensor, list_dict_tensor_to_device
 
 
 class BaseModel(nn.Module, ABC):
@@ -116,8 +118,8 @@ class BaseModel(nn.Module, ABC):
         :return:
         """
         assert self.features_extractor is not None, "No features extractor was set"
-        preprocessed_obs = preprocess_obs(obs, self.observation_space, normalize_images=self.normalize_images)
-        return self.features_extractor(preprocessed_obs)
+        # preprocessed_obs = preprocess_obs(obs, self.observation_space, normalize_images=self.normalize_images)
+        return self.features_extractor(obs)
 
     def _get_data(self) -> Dict[str, Any]:
         """
@@ -260,10 +262,6 @@ class BasePolicy(BaseModel):
         #     state = self.initial_state
         # if mask is None:
         #     mask = [False for _ in range(self.n_envs)]
-        if isinstance(observation, dict):
-            observation = ObsDictWrapper.convert_dict(observation)
-        else:
-            observation = np.array(observation)
 
         # Handle the different cases for images
         # as PyTorch use channel first format
@@ -279,11 +277,13 @@ class BasePolicy(BaseModel):
                 ):
                     observation = transpose_obs
 
-        vectorized_env = is_vectorized_observation(observation, self.observation_space)
+        # Not sure how to modify this part
+        # vectorized_env = is_vectorized_observation(observation, self.observation_space)
 
-        observation = observation.reshape((-1,) + self.observation_space.shape)
+        # observation = observation.reshape((-1,) + self.observation_space.shape)
 
-        observation = th.as_tensor(observation).to(self.device)
+        observation = list_dict_numpy_to_tensor(deepcopy(observation))
+        observation = list_dict_tensor_to_device(observation, self.device)
         with th.no_grad():
             actions = self._predict(observation, deterministic=deterministic)
         # Convert to numpy
@@ -298,10 +298,11 @@ class BasePolicy(BaseModel):
                 # out of bound error (e.g. if sampling from a Gaussian distribution)
                 actions = np.clip(actions, self.action_space.low, self.action_space.high)
 
-        if not vectorized_env:
-            if state is not None:
-                raise ValueError("Error: The environment must be vectorized when using recurrent policies.")
-            actions = actions[0]
+        # Not sure how to modify this part
+        # if not vectorized_env:
+        #     if state is not None:
+        #         raise ValueError("Error: The environment must be vectorized when using recurrent policies.")
+        #     actions = actions[0]
 
         return actions, state
 

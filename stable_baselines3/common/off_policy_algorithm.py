@@ -251,6 +251,7 @@ class OffPolicyAlgorithm(BaseAlgorithm):
 
         while self.num_timesteps < total_timesteps:
 
+            roll_start = time.time()
             rollout = self.collect_rollouts(
                 self.env,
                 n_episodes=self.n_episodes_rollout,
@@ -261,6 +262,8 @@ class OffPolicyAlgorithm(BaseAlgorithm):
                 replay_buffer=self.replay_buffer,
                 log_interval=log_interval,
             )
+            roll_duration = time.time() - roll_start
+            print("Roll duration: %f" % roll_duration)
 
             if rollout.continue_training is False:
                 break
@@ -269,7 +272,10 @@ class OffPolicyAlgorithm(BaseAlgorithm):
                 # If no `gradient_steps` is specified,
                 # do as many gradients steps as steps performed during the rollout
                 gradient_steps = self.gradient_steps if self.gradient_steps > 0 else rollout.episode_timesteps
+                train_start = time.time()
                 self.train(batch_size=self.batch_size, gradient_steps=gradient_steps)
+                train_duration = time.time() - train_start
+                print("Train duration: %f" % train_duration)
 
         callback.on_training_end()
 

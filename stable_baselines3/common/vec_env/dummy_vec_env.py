@@ -26,9 +26,8 @@ class DummyVecEnv(VecEnv):
         env = self.envs[0]
         VecEnv.__init__(self, len(env_fns), env.observation_space, env.action_space)
         obs_space = env.observation_space
-        self.keys, shapes, dtypes = obs_space_info(obs_space)
 
-        self.buf_obs = OrderedDict([(k, np.zeros((self.num_envs,) + tuple(shapes[k]), dtype=dtypes[k])) for k in self.keys])
+        self.buf_obs = [None] * self.num_envs
         self.buf_dones = np.zeros((self.num_envs,), dtype=np.bool)
         self.buf_rews = np.zeros((self.num_envs,), dtype=np.float32)
         self.buf_infos = [{} for _ in range(self.num_envs)]
@@ -87,14 +86,10 @@ class DummyVecEnv(VecEnv):
             return super().render(mode=mode)
 
     def _save_obs(self, env_idx: int, obs: VecEnvObs) -> None:
-        for key in self.keys:
-            if key is None:
-                self.buf_obs[key][env_idx] = obs
-            else:
-                self.buf_obs[key][env_idx] = obs[key]
+        self.buf_obs[env_idx] = obs
 
     def _obs_from_buf(self) -> VecEnvObs:
-        return dict_to_obs(self.observation_space, copy_obs_dict(self.buf_obs))
+        return deepcopy(self.buf_obs)
 
     def get_attr(self, attr_name: str, indices: VecEnvIndices = None) -> List[Any]:
         """Return attribute from vectorized environment (see base class)."""

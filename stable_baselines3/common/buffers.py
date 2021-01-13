@@ -1,6 +1,7 @@
 import warnings
 from abc import ABC, abstractmethod
 from typing import Dict, Generator, Optional, Union
+from copy import deepcopy
 
 import numpy as np
 import torch as th
@@ -15,6 +16,7 @@ except ImportError:
 from stable_baselines3.common.preprocessing import get_action_dim, get_obs_shape
 from stable_baselines3.common.type_aliases import ReplayBufferSamples, RolloutBufferSamples
 from stable_baselines3.common.vec_env import VecNormalize
+from stable_baselines3.common.raph_tools import list_dict_numpy_to_tensor, list_dict_tensor_to_device
 
 
 class BaseBuffer(ABC):
@@ -41,8 +43,8 @@ class BaseBuffer(ABC):
         self.buffer_size = buffer_size
         self.observation_space = observation_space
         self.action_space = action_space
-        self.obs_shape = get_obs_shape(observation_space)
-        self.action_dim = get_action_dim(action_space)
+        # self.obs_shape = get_obs_shape(observation_space)
+        # self.action_dim = get_action_dim(action_space)
         self.pos = 0
         self.full = False
         self.device = device
@@ -125,7 +127,10 @@ class BaseBuffer(ABC):
         :return:
         """
         if copy:
-            return th.tensor(array).to(self.device)
+            return list_dict_tensor_to_device(
+                list_dict_numpy_to_tensor(deepcopy(array)),
+                self.device
+            )
         return th.as_tensor(array).to(self.device)
 
     @staticmethod
@@ -177,16 +182,17 @@ class ReplayBuffer(BaseBuffer):
             mem_available = psutil.virtual_memory().available
 
         self.optimize_memory_usage = optimize_memory_usage
-        self.observations = np.zeros((self.buffer_size, self.n_envs) + self.obs_shape, dtype=observation_space.dtype)
+        self.observations = [[None] * self.n_envs] * self.buffer_size
         if optimize_memory_usage:
             # `observations` contains also the next observation
             self.next_observations = None
         else:
-            self.next_observations = np.zeros((self.buffer_size, self.n_envs) + self.obs_shape, dtype=observation_space.dtype)
-        self.actions = np.zeros((self.buffer_size, self.n_envs, self.action_dim), dtype=action_space.dtype)
+            self.next_observations = [[None] * self.n_envs] * self.buffer_size
+        self.actions = np.zeros((self.buffer_size, self.n_envs, 1), dtype=action_space.dtype)
         self.rewards = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.dones = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
 
+        # Not sure how to modify this part
         if psutil is not None:
             total_memory_usage = self.observations.nbytes + self.actions.nbytes + self.rewards.nbytes + self.dones.nbytes
             if self.next_observations is not None:
@@ -203,11 +209,11 @@ class ReplayBuffer(BaseBuffer):
 
     def add(self, obs: np.ndarray, next_obs: np.ndarray, action: np.ndarray, reward: np.ndarray, done: np.ndarray) -> None:
         # Copy to avoid modification by reference
-        self.observations[self.pos] = np.array(obs).copy()
+        self.observations[self.pos] = deepcopy(obs)
         if self.optimize_memory_usage:
-            self.observations[(self.pos + 1) % self.buffer_size] = np.array(next_obs).copy()
+            self.observations[(self.pos + 1) % self.buffer_size] = deepcopy(next_obs)
         else:
-            self.next_observations[self.pos] = np.array(next_obs).copy()
+            self.next_observations[self.pos] = deepcopy(next_obs)
 
         self.actions[self.pos] = np.array(action).copy()
         self.rewards[self.pos] = np.array(reward).copy()
@@ -244,10 +250,10 @@ class ReplayBuffer(BaseBuffer):
         if self.optimize_memory_usage:
             next_obs = self._normalize_obs(self.observations[(batch_inds + 1) % self.buffer_size, 0, :], env)
         else:
-            next_obs = self._normalize_obs(self.next_observations[batch_inds, 0, :], env)
+            next_obs = self._normalize_obs([self.next_observations[i][0] for i in batch_inds], env)
 
         data = (
-            self._normalize_obs(self.observations[batch_inds, 0, :], env),
+            self._normalize_obs([self.observations[i][0] for i in batch_inds], env),
             self.actions[batch_inds, 0, :],
             next_obs,
             self.dones[batch_inds],
